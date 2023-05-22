@@ -1,102 +1,68 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.signal import find_peaks
 
 def FivePointDiff(input_file, sample_rate):
-
-    # Read data from .txt file
     x = np.loadtxt(input_file)
-    
-    T = 1/sample_rate
-    
-    # Initialize output array
+    T = 1 / sample_rate
     y = np.zeros_like(x)
+
+    for n in range(2, len(x) - 2):
+        y[n] = (1 / (8 * T)) * (-x[n - 2] - 2 * x[n - 1] + 2 * x[n + 1] + x[n + 2]) ** 2
     
-    # Apply 5-point difference equation
-    for n in range(2, len(x)-2):
-        y[n] = (1/(8*T)) * (-x[n-2] - 2*x[n-1] + 2*x[n+1] + x[n+2])
-    
-    y_sq = np.square(y)
-    
-    return y_sq
+    return y
 
 def smoothing(x, N):
     # Initialize output array
     y = np.zeros_like(x)
-    
+
     # Compute initial average
     y[N-1] = np.mean(x[:N])
-    
+
     # Apply recursive moving average equation
     for n in range(N, len(x)):
         y[n] = y[n-1] + (1/N)*(x[n] - x[n-N])
-    
+
     return y
 
-# def Autocorrelation(lag, y):  
-#     sum = 0
-#     for i in range(len(y)):
-#        sum += y[i]*y[i-lag]
-    
-#     return sum
-
-#################
 def autocorrelation(y):
     n = len(y)
     A = np.zeros(n)
     for m in range(n):
         for i in range(m, n):
             A[m] += y[i] * y[i-m]
-        A[m] /= (n - m)
     return A
 
-def avg_time_between_beats(y, sample_rate):
-    # Compute autocorrelation
-    A = autocorrelation(y)
-    
-    # Find first peak after 0 lag
-    peak_index = np.argmax(A[1:]) + 1
-    
-    # Convert peak index to time
-    T = 1/sample_rate
-    avg_time = peak_index * T
-    
+def avg_time_between_beats(A, sample_rate):
+    peaks, _ = find_peaks(A, height=np.percentile(A, 92)) 
+    T = 1 / sample_rate
+    beat_times = np.diff(peaks) * T
+    avg_time = np.mean(beat_times) if len(beat_times) > 0 else 0
+
     return avg_time
 
+def avg_heart_rate(A, sample_rate):
+    avg_time = avg_time_between_beats(A, sample_rate)
+    avg_rate = 60 / avg_time if avg_time > 0 else 0
+    return avg_rate
 
 
-# def autocorrelation_plot(autocorrelation):
+#description:  compute_frequency takes the autocorrelation array A and
+# the sample rate as arguments. It calculates the beat times between peaks, converts 
+# them to frequencies by taking the reciprocal, and then calculates the average frequency.
+def compute_frequency(A, sample_rate):
+    peaks, _ = find_peaks(A, height=np.percentile(A, 92))  
+    T = 1 / sample_rate
+    beat_times = np.diff(peaks) * T
+    frequencies = 1 / beat_times if len(beat_times) > 0 else []
+    avg_frequency = np.mean(frequencies) if len(frequencies) > 0 else 0
 
-#     lag = len(autocorrelation)
-#     plt.plot(lag, autocorrelation)
-#     plt.xlabel('Lag')
-#     plt.ylabel('Autocorrelation')
-#     plt.title('Autocorrelation Plot')
-#     plt.grid(True)
-#     plt.show()
+    return avg_frequency
 
 
-def plot_signal_and_autocorrelation(y, A):
+def plot_ecg_signal(x, dx2, y, A):
     # Create figure
-    fig, axs = plt.subplots(2, 1)
-    
-    # Plot first 2000 samples of signal
-    axs[0].plot(y[:2000])
-    axs[0].set_title('ECG Signal')
-    axs[0].set_xlabel('Sample')
-    axs[0].set_ylabel('Amplitude')
-    
-    # Plot autocorrelation
-    axs[1].plot(A)
-    axs[1].set_title('Autocorrelation')
-    axs[1].set_xlabel('Lag')
-    axs[1].set_ylabel('Autocorrelation')
-    
-    # Show figure
-    plt.show()
-    
-def plot_ecg_signal(x, dx2, y):
-    # Create figure
-    fig, axs = plt.subplots(3, 1)
+    fig, axs = plt.subplots(4, 1)
     
     # Plot first 2000 samples of signal
     axs[0].plot(x[:2000])
@@ -116,23 +82,26 @@ def plot_ecg_signal(x, dx2, y):
     axs[2].set_xlabel(' ')
     axs[2].set_ylabel('Amplitude')
     
+    # Plot autocorrelated signal
+    axs[3].plot(A[:2000])
+    axs[3].set_title('Autocorrelated ECG Signal')
+    axs[3].set_xlabel(' ')
+    axs[3].set_ylabel('Amplitude')
+
     # Show figure
     plt.show()
 
 
 # Read data from .txt file
-file = 'Data2.txt'
+file = 'Data1.txt'
 x = np.loadtxt(file)
 
 sample_rate = 512
 dx2 = FivePointDiff(file, sample_rate)
 y = smoothing(dx2, 31)
 A = autocorrelation(y)
+plot_ecg_signal(x, dx2, y,A)
 
-plot_ecg_signal(x, dx2, y)
-
-
-# plot_signal_and_autocorrelation(y, A)
+print("The Average Frequency is", compute_frequency(A, sample_rate))
 print("The Average Time between Beats is", avg_time_between_beats(A, sample_rate))
-
-
+print("The Average Heart Rate is", avg_heart_rate(A, sample_rate))
